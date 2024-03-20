@@ -25,12 +25,12 @@ STR_DELIMITERS = set(("'", '"'))
 def parse(sql: str) -> ParsedOperation:
     """
     Parse a string representing a valid SQL statement and return the
-    corresponding Operation.
+    corresponding ParsedOperation.
     """
     table_name = None
     cols = None
     op_type = None
-    filter = None
+    filter = []
     limit = float('inf')
     query_len = len(sql)
     state = "START"
@@ -79,8 +79,11 @@ def parse(sql: str) -> ParsedOperation:
             limit, idx = extract_num(sql, idx)
             logging.debug(f"LIMIT to {limit} rows...")
             state = "END"
-        else:
+        elif state == "END":
+            logging.debug("Parsing expression complete..")
             break
+        else:
+            raise ValueError(f"Invalid operation {state}")
     operation = None
     if op_type == "SELECT":
         operation = ParsedOperation(op_type, cols, table_name, limit, filter)
