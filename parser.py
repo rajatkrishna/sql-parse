@@ -123,14 +123,23 @@ def extract_col_from_expr(query: str, idx: int) -> Tuple[str, int]:
 
 def extract_num(query: str, idx: int) -> Tuple[float, int]:
     """
-    Extract first decimal starting at idx as a float value.
+    Extract first numeric type starting at idx as an int or float value.
     """
     token = ''
     i = idx
+    isFloat = False
     while i < len(query) and (query[i].isnumeric() or query[i] == '.'):
-        token += query[i]
+        if query[i].isnumeric():
+            token += query[i]
+        elif query[i] == '.':
+            if isFloat:
+                raise ValueError("Invalid float!")
+            isFloat = True
+            token += query[i]
         i += 1
-    return float(token), i
+    if isFloat:
+        return float(token), i
+    return int(token), i
 
 
 def extract_cols(query: str, idx: int) -> Tuple[List[str], int]:
@@ -200,7 +209,7 @@ def tokenize_cond_expr(query: str, idx: int) -> Tuple[List[Any], int]:
         else:
             if query.startswith("LIMIT", i):
                 return tokens, i
-            if char.isalpha():  # either a column name or a string-operator
+            if char.isalpha():  # either a column name or a string operator
                 token, i = extract_col_from_expr(query, i)
                 tokens.append(token)
             else:
