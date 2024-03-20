@@ -68,6 +68,8 @@ def eval_filters(row: dict, operation: parser.ParsedOperation) -> bool:
     resp = True
     while operands:
         op = operands.pop(-1)
+        if not isinstance(op, bool):
+            raise ValueError("Invalid WHERE clause!")
         resp = resp and op
     return resp
 
