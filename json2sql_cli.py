@@ -3,6 +3,7 @@ import json
 import parser
 import executor
 import time
+from tabulate import tabulate
 
 
 def load_json(path: str) -> list:
@@ -41,6 +42,9 @@ if __name__ == "__main__":
                 results = executor.execute(data, op)
                 print(
                     f"Query executed in {time.time() - start:.3f} seconds...")
-                print(results)
+                if results:
+                    print(tabulate(results, headers='keys'))
+                else:
+                    print("No matching rows found!")
             except Exception as e:
                 print(f"Failed to execute query: {e}")
