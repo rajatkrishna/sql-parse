@@ -10,6 +10,7 @@ OPS = {
     "AND": lambda a, b: a and b,
     "OR": lambda a, b: a or b
 }
+
 OP_PRECEDENCE = {
     "=": 4,
     "!=": 4,
