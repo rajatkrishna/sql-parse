@@ -295,11 +295,11 @@ def get_next_expr_token(query: str, idx: int) -> Tuple[List[Any], int]:
         else:
             # check for subsequent keywords (expression complete)
             for kw in RESERVED_KWS:
-                if query.startswith(kw, i):
+                if query.upper().startswith(kw, i):
                     return None, i
             # check operators
             for op in OPS.keys():
-                if query.startswith(op, i):
+                if query.upper().startswith(op, i):
                     return op, i + len(op)
             # has to be a column name
             return extract_col_from_expr(query, i)
