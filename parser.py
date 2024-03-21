@@ -234,9 +234,9 @@ def extract_expr(query: str, i: int) -> Tuple[Node, int]:
     operators = list()
     curr_token, i = get_next_token(query, i)
     while curr_token:
-        if curr_token in OPS:
+        if curr_token.upper() in OPS:
             if operators and operators[-1] != '(' and \
-                    OP_PRECEDENCE[curr_token] < OP_PRECEDENCE[operators[-1]]:
+                    OP_PRECEDENCE[curr_token.upper()] < OP_PRECEDENCE[operators[-1]]:
                 right = stack.pop(-1)
                 left = stack.pop(-1)
                 op = operators.pop(-1)
@@ -246,7 +246,7 @@ def extract_expr(query: str, i: int) -> Tuple[Node, int]:
                 logging.debug(
                     f"Binary operator: {op} with op1 = {left.value} and op2 = {right.value}")
                 stack.append(BinaryOperator(op, left, right))
-            operators.append(curr_token)
+            operators.append(curr_token.upper())
         elif curr_token == "(":
             operators.append(curr_token)
         elif curr_token == ")":
