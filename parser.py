@@ -1,6 +1,5 @@
 from typing import Tuple, List, Any, NamedTuple
 import logging
-from expr_tree import ColName, Literal, BinaryOperator, Node
 
 OPS = {
     ">": lambda a, b: a > b,
@@ -20,11 +19,67 @@ OP_PRECEDENCE = {
     "OR": 1
 }
 
+
+class Node:
+    def __init__(self, value: Any):
+        self.left = None
+        self.right = None
+        self.value = value
+
+    def evaluate(self, row: dict) -> bool:
+        raise NotImplementedError()
+
+
+class BinaryOperator(Node):
+    """
+    Node representing a binary operator.
+    """
+
+    def __init__(self, operator: str, left: Node, right: Node):
+        super().__init__(operator)
+        self.left = left
+        self.right = right
+
+    def evaluate(self, row: dict) -> bool:
+        l_result = self.left.evaluate(row)
+        r_result = self.right.evaluate(row)
+        logging.debug(f"Evaluating {l_result} {self.value} {r_result}")
+        return OPS[self.value](l_result, r_result)
+
+
+class Literal(Node):
+    """
+    Node representing string/numeric literals.
+    """
+
+    def __init__(self, value: Any):
+        super().__init__(value)
+
+    def evaluate(self, row: dict) -> bool:
+        return self.value
+
+
+class ColName(Node):
+    """
+    Node representing column names.
+    """
+
+    def __init__(self, value: Any):
+        super().__init__(value)
+
+    def evaluate(self, row: dict) -> bool:
+        if self.value not in row:
+            raise ValueError(f"Column {self.value} not found in item {row}")
+        return row[self.value]
+
+
 RESERVED_KWS = ("SELECT", "FROM", "WHERE", "LIMIT")
+STR_DELIMITERS = set(("'", '"'))
+
+# Represents a parsed SQL statement.
 ParsedOperation = NamedTuple(
     'ParsedOperation', [('op_type', str), ('cols', List[str]),
                         ('table_name', str), ('limit', int), ('expr', Node)])
-STR_DELIMITERS = set(("'", '"'))
 
 
 def parse(sql: str) -> ParsedOperation:
@@ -215,7 +270,7 @@ def extract_string_literal(query: str, idx: int) -> Tuple[str, int]:
 
 def get_next_expr_token(query: str, idx: int) -> Tuple[List[Any], int]:
     """
-    Extract the next token in the expression starting at idx.
+    Extract the next token in the WHERE clause expression starting at idx.
     """
 
     i = idx
