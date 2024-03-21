@@ -97,6 +97,33 @@ def parse(sql: str) -> ParsedOperation:
     return operation
 
 
+def execute(data: List[dict], operation: ParsedOperation) -> List:
+    """
+    Execute the parsed operation against the list of data objects.
+    """
+
+    results = []
+    count = 0
+    for item in data:
+        if count >= operation.limit:
+            break
+        include = operation.expr.evaluate(item) if operation.expr else True
+        if include:
+            result_item = dict()
+            if len(operation.cols) == 1 and operation.cols[0] == "*":
+                result_item = item
+            else:
+                for col in operation.cols:
+                    if col not in item:
+                        raise ValueError(
+                            f"Column {col} not found in table {operation.table_name}")
+                    result_item[col] = item[col]
+            results.append(result_item)
+            count += 1
+
+    return results
+
+
 def extract_op(query: str, idx: int) -> Tuple[str, int]:
     """
     Extract keywords representing valid operations containing a-z characters.
@@ -186,7 +213,7 @@ def extract_string_literal(query: str, idx: int) -> Tuple[str, int]:
     return str_literal, i + 1
 
 
-def get_next_token(query: str, idx: int) -> Tuple[List[Any], int]:
+def get_next_expr_token(query: str, idx: int) -> Tuple[List[Any], int]:
     """
     Extract the next token in the expression starting at idx.
     """
@@ -232,9 +259,9 @@ def extract_expr(query: str, i: int) -> Tuple[Node, int]:
 
     stack = list()
     operators = list()
-    curr_token, i = get_next_token(query, i)
+    curr_token, i = get_next_expr_token(query, i)
     while curr_token:
-        if curr_token.upper() in OPS:
+        if isinstance(curr_token, str) and curr_token.upper() in OPS:
             if operators and operators[-1] != '(' and \
                     OP_PRECEDENCE[curr_token.upper()] < OP_PRECEDENCE[operators[-1]]:
                 right = stack.pop(-1)
@@ -266,7 +293,7 @@ def extract_expr(query: str, i: int) -> Tuple[Node, int]:
                 operators.pop(-1)
         else:
             stack.append(Literal(curr_token))
-        curr_token, i = get_next_token(query, i)
+        curr_token, i = get_next_expr_token(query, i)
 
     # Evaluate remaining ops
     while operators:

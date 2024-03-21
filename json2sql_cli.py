@@ -1,7 +1,6 @@
 import argparse
 import json
 import parser
-import executor
 import time
 from tabulate import tabulate
 
@@ -39,7 +38,7 @@ if __name__ == "__main__":
         if op:
             try:
                 start = time.time()
-                results = executor.execute(data, op)
+                results = parser.execute(data, op)
                 print(
                     f"Query executed in {time.time() - start:.3f} seconds...")
                 if results:
