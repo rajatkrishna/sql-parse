@@ -1,5 +1,6 @@
 from typing import Tuple, List, Any, NamedTuple
 import logging
+from expr_tree import ColName, Literal, BinaryOperator, Node
 
 OPS = {
     ">": lambda a, b: a > b,
@@ -17,8 +18,11 @@ OP_PRECEDENCE = {
     "AND": 2,
     "OR": 1
 }
+
+RESERVED_KWS = ("SELECT", "FROM", "WHERE", "LIMIT")
 ParsedOperation = NamedTuple(
-    'ParsedOperation', [('op_type', str), ('cols', List[str]), ('table_name', str), ('limit', int), ('filters', List[Any])])
+    'ParsedOperation', [('op_type', str), ('cols', List[str]),
+                        ('table_name', str), ('limit', int), ('expr', Node)])
 STR_DELIMITERS = set(("'", '"'))
 
 
@@ -30,7 +34,7 @@ def parse(sql: str) -> ParsedOperation:
     table_name = None
     cols = None
     op_type = None
-    filter = []
+    expr = None
     limit = float('inf')
     query_len = len(sql)
     state = "START"
@@ -71,8 +75,7 @@ def parse(sql: str) -> ParsedOperation:
                     "Invalid table name! Cannot start with special characters.")
         # parse filter expression
         elif state == "WHERE":
-            filter, idx = tokenize_cond_expr(sql, idx)
-            logging.debug(f"Tokenized WHERE clause: {filter}")
+            expr, idx = extract_expr(sql, idx)
             state = "NEXT_OP"
         # parse limit value
         elif state == "LIMIT":
@@ -86,7 +89,7 @@ def parse(sql: str) -> ParsedOperation:
             raise ValueError(f"Invalid operation {state}")
     operation = None
     if op_type == "SELECT":
-        operation = ParsedOperation(op_type, cols, table_name, limit, filter)
+        operation = ParsedOperation(op_type, cols, table_name, limit, expr)
     else:
         raise ValueError(f"Invalid operation {op_type}")
 
@@ -175,17 +178,19 @@ def extract_string_literal(query: str, idx: int) -> Tuple[str, int]:
     Extract string value enclosed in quotes.
     """
     str_literal = ""
-    i = idx
+    i = idx + 1
     while i < len(query) and query[i] not in STR_DELIMITERS:
         str_literal += query[i]
         i += 1
     return str_literal, i + 1
 
 
-def tokenize_cond_expr(query: str, idx: int) -> Tuple[List[Any], int]:
-    tokens = []
+def get_next_token(query: str, idx: int) -> Tuple[List[Any], int]:
+    """
+    Extract the next token in the expression starting at idx.
+    """
+
     i = idx
-    token = ""
     while i < len(query):
         char = query[i]
         # ignore spaces between tokens
@@ -193,29 +198,86 @@ def tokenize_cond_expr(query: str, idx: int) -> Tuple[List[Any], int]:
             i += 1
         # extract numeric types
         elif char.isnumeric():
-            token, i = extract_num(query, i)
-            tokens.append(token)
+            return extract_num(query, i)
         # tokenize parentheses
         elif char == '(':
-            tokens.append(char)
-            i += 1
+            return char, i + 1
         elif char == ")":
-            tokens.append(char)
+            return char, i + 1
             i += 1
         # extract string literals
         elif char in STR_DELIMITERS:
-            token, i = extract_string_literal(query, i)
-        # should be an operator or column name
+            return extract_string_literal(query, i)
+        # should be an operator/column name/next token
         else:
-            if query.startswith("LIMIT", i):
-                return tokens, i
-            if char.isalpha():  # either a column name or a string operator
-                token, i = extract_col_from_expr(query, i)
-                tokens.append(token)
-            else:
-                for op in OPS.keys():  # compare against known operators
-                    if query.startswith(op, i):
-                        tokens.append(op)
-                        i += len(op)
+            # check for subsequent keywords (expression complete)
+            for kw in RESERVED_KWS:
+                if query.startswith(kw, i):
+                    return None, i
+            # check operators
+            for op in OPS.keys():
+                if query.startswith(op, i):
+                    return op, i + len(op)
+            # has to be a column name
+            return extract_col_from_expr(query, i)
 
-    return tokens, i
+    return None, i
+
+
+def extract_expr(query: str, i: int) -> Tuple[Node, int]:
+    """
+    Parse WHERE clause expression as a tree and return the head.
+    """
+
+    stack = list()
+    operators = list()
+    curr_token, i = get_next_token(query, i)
+    while curr_token:
+        if curr_token in OPS:
+            if operators and operators[-1] != '(' and \
+                    OP_PRECEDENCE[curr_token] < OP_PRECEDENCE[operators[-1]]:
+                right = stack.pop(-1)
+                left = stack.pop(-1)
+                op = operators.pop(-1)
+                # if the left operand is not an operator, it must be a column name
+                if isinstance(left, Literal):
+                    left = ColName(left.value)
+                logging.debug(
+                    f"Binary operator: {op} with op1 = {left.value} and op2 = {right.value}")
+                stack.append(BinaryOperator(op, left, right))
+            operators.append(curr_token)
+        elif curr_token == "(":
+            operators.append(curr_token)
+        elif curr_token == ")":
+            # Evaluate everything inside parentheses
+            while operators and operators[-1] != '(':
+                right = stack.pop(-1)
+                left = stack.pop(-1)
+                op = operators.pop(-1)
+                # if the left operand is not an operator, it must be a column name
+                if isinstance(left, Literal):
+                    left = ColName(left.value)
+                logging.debug(
+                    f"Binary operator: {op} with op1 = {left.value} and op2 = {right.value}")
+                stack.append(BinaryOperator(op, left, right))
+            # Remove trailing '('
+            if operators:
+                operators.pop(-1)
+        else:
+            stack.append(Literal(curr_token))
+        curr_token, i = get_next_token(query, i)
+
+    # Evaluate remaining ops
+    while operators:
+        right = stack.pop(-1)
+        left = stack.pop(-1)
+        if isinstance(left, Literal):
+            left = ColName(left.value)
+        operator = operators.pop(-1)
+        logging.debug(
+            f"Binary operator: {operator} with op1 = {left.value} and op2 = {right.value}")
+        stack.append(BinaryOperator(operator, left, right))
+
+    if stack:
+        return stack[0], i
+    return None, i

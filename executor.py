@@ -80,7 +80,8 @@ def execute(data: list, operation: parser.ParsedOperation) -> List:
     for item in data:
         if count >= operation.limit:
             break
-        if eval_filters(item, operation):
+        include = operation.expr.evaluate(item) if operation.expr else True
+        if include:
             result_item = dict()
             if len(operation.cols) == 1 and operation.cols[0] == "*":
                 result_item = item
@@ -91,6 +92,6 @@ def execute(data: list, operation: parser.ParsedOperation) -> List:
                             f"Column {col} not found in table {operation.table_name}")
                     result_item[col] = item[col]
             results.append(result_item)
-        count += 1
+            count += 1
 
     return results
